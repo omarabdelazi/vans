@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+body {
+  font-family: "Inter Tight", system-ui, sans-serif;
+}
+
+@media (hover: hover) and (pointer: fine) and (min-width: 1024px) {
+  #scroll-spacer {
+    cursor: none;
+  }
+}
+
+.bp-card {
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bp-card {
+    will-change: auto;
+  }
+}
