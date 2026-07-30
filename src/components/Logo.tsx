@@ -19,11 +19,11 @@ export function Logo() {
           fontSize="110"
           letterSpacing="-0.04em"
         >
-          prmpt
+          vans
         </text>
-        <circle cx="338" cy="16" r="11.75" stroke="#fff" strokeWidth="2.5" />
+        <circle cx="290" cy="16" r="11.75" stroke="#fff" strokeWidth="2.5" />
         <text
-          x="338"
+          x="290"
           y="21"
           textAnchor="middle"
           fill="#fff"

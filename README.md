@@ -1,11 +1,19 @@
 # vans
 
-Full-screen, scroll-driven fashion/archive landing page.
+Scroll-driven fashion landing page + full e-commerce store + Arabic admin
+dashboard, running on Cloudflare Pages (Functions + D1 + R2).
 
-Two phases: a hero with a cursor-scrubbed full-viewport video background and
-exclusion-blended UI overlays, followed by a black gallery panel that slides up
-and scrolls through a scattered grid of product images that scale in and out of
-view. The page ends with a white outro overlay and a "view" CTA.
+- **Landing** (`/`): cursor-scrubbed video hero, exclusion-blended overlays, a
+  3D sneaker that follows the mouse, and a scroll gallery ending in a "view" CTA.
+- **Store** (`/shop`): categories, search, product pages with 3D viewer and
+  AR try-on (model-viewer), cart, checkout with InstaPay / Vodafone Cash
+  (transfer-screenshot upload) or cash on delivery, contact form.
+- **Admin** (`/admin`, Arabic RTL): categories & products CRUD (per-size stock
+  EU 35–44, discounts with old/new price, 3D/AR flags), order review with
+  payment-proof verification (stock is deducted only when a sale is confirmed),
+  customer messages, in-store POS with receipt printing, and store settings.
+
+Deployment/setup guide (Arabic): see [SETUP.md](./SETUP.md).
 
 ## Stack
 

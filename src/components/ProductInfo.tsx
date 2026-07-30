@@ -30,7 +30,7 @@ export function ProductInfo() {
         <div className="w-full text-center font-medium text-[20px] uppercase leading-[100%] tracking-[-0.04em] text-white lg:text-[30px]">
           Archive Collection
           <br />
-          {'"Prompt"'}
+          {'"Vans"'}
         </div>
       </div>
       <div className="text-center font-medium text-[60px] leading-[100%] tracking-[-0.04em] text-white lg:text-[80px]">

@@ -19,3 +19,20 @@ body {
     will-change: auto;
   }
 }
+
+/* Receipt printing: hide everything except the receipt itself. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .receipt-print,
+  .receipt-print * {
+    visibility: visible;
+  }
+  .receipt-print {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 76mm;
+    padding: 4mm;
+  }
+}

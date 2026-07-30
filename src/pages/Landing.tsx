@@ -2,23 +2,23 @@ import { useEffect, useRef } from 'react'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { useGSAP } from '@gsap/react'
-import { BlackPanel } from './components/BlackPanel'
-import { Caption } from './components/Caption'
-import { CustomCursor } from './components/CustomCursor'
-import { Footer } from './components/Footer'
-import { HeaderNav } from './components/HeaderNav'
-import { Logo } from './components/Logo'
-import { ProductInfo } from './components/ProductInfo'
-import { VideoCanvas } from './components/VideoCanvas'
-import { ViewButton } from './components/ViewButton'
-import { WhiteOverlay } from './components/WhiteOverlay'
-import { useViewport } from './useViewport'
+import { BlackPanel } from '../components/BlackPanel'
+import { Caption } from '../components/Caption'
+import { Footer } from '../components/Footer'
+import { HeaderNav } from '../components/HeaderNav'
+import { Logo } from '../components/Logo'
+import { ProductInfo } from '../components/ProductInfo'
+import { Shoe3DCursor } from '../components/Shoe3DCursor'
+import { VideoCanvas } from '../components/VideoCanvas'
+import { ViewButton } from '../components/ViewButton'
+import { WhiteOverlay } from '../components/WhiteOverlay'
+import { useViewport } from '../useViewport'
 
 gsap.registerPlugin(ScrollTrigger, useGSAP)
 
 const SYMBOLS = ['8', '$', '^^', '%', '/']
 
-export default function App() {
+export default function Landing() {
   const spacerRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -138,7 +138,7 @@ export default function App() {
       <ProductInfo />
       <ViewButton />
       <Footer />
-      <CustomCursor />
+      <Shoe3DCursor />
     </div>
   )
 }

@@ -1,8 +1,11 @@
+import { Link } from 'react-router-dom'
+
 export function ViewButton() {
   return (
-    <div
+    <Link
+      to="/shop"
       id="outro-buy"
-      className="pointer-events-none fixed bottom-[60px] left-4 right-4 z-20 flex h-[100px] items-center justify-center rounded-[1335px] bg-white lg:bottom-8 lg:left-auto lg:right-8 lg:h-[174px] lg:w-[330px]"
+      className="fixed bottom-[60px] left-4 right-4 z-20 flex h-[100px] items-center justify-center rounded-[1335px] bg-white lg:bottom-8 lg:left-auto lg:right-8 lg:h-[174px] lg:w-[330px]"
       style={{
         mixBlendMode: 'exclusion',
         transform: 'scale(0)',
@@ -15,6 +18,6 @@ export function ViewButton() {
       >
         view
       </span>
-    </div>
+    </Link>
   )
 }
