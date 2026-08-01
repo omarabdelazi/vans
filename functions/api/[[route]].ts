@@ -85,7 +85,11 @@ const SCHEMA = [
     ('instapay_number', ''),
     ('vodafone_cash_number', ''),
     ('store_phone', ''),
-    ('store_address', '')`,
+    ('store_address', ''),
+    ('landing_caption', 'VANS independent shoe store — EU sizes 35-44, delivered all over Egypt. Pay with InstaPay, Vodafone Cash, or cash on delivery.'),
+    ('landing_label', 'ARCHIVE COLLECTION
+"VANS"'),
+    ('landing_big_text', 'SHOP NOW')`,
 ]
 
 let migrated = false

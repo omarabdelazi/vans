@@ -1,8 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { useGSAP } from '@gsap/react'
-import { BlackPanel } from '../components/BlackPanel'
+import { GALLERY_IMAGES } from '../assets'
+import { api, type Product, type Settings } from '../lib/api'
+import { BlackPanel, type GalleryItem } from '../components/BlackPanel'
 import { Caption } from '../components/Caption'
 import { Footer } from '../components/Footer'
 import { HeaderNav } from '../components/HeaderNav'
@@ -18,11 +20,32 @@ gsap.registerPlugin(ScrollTrigger, useGSAP)
 
 const SYMBOLS = ['8', '$', '^^', '%', '/']
 
+const FALLBACK_ITEMS: GalleryItem[] = GALLERY_IMAGES.map((img) => ({ img }))
+
 export default function Landing() {
   const spacerRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const { cols } = useViewport()
+  const [settings, setSettings] = useState<Settings>({})
+  const [items, setItems] = useState<GalleryItem[]>(FALLBACK_ITEMS)
+
+  // The gallery shows the store's real products (falling back to the
+  // built-in editorial shots until products with photos exist).
+  useEffect(() => {
+    api<Settings>('/settings')
+      .then(setSettings)
+      .catch(() => {})
+    api<Product[]>('/products')
+      .then((products) => {
+        const withPhotos = products
+          .filter((p) => p.image_url)
+          .slice(0, 12)
+          .map((p) => ({ img: p.image_url, link: `/product/${p.id}` }))
+        if (withPhotos.length) setItems(withPhotos)
+      })
+      .catch(() => {})
+  }, [])
 
   // Phase 1: the black panel slides up over the video during the first 100vh.
   useGSAP(() => {
@@ -120,7 +143,7 @@ export default function Landing() {
       window.removeEventListener('resize', measure)
       window.removeEventListener('scroll', onScroll)
     }
-  }, [cols])
+  }, [cols, items])
 
   return (
     <div
@@ -130,12 +153,12 @@ export default function Landing() {
       style={{ height: '500vh' }}
     >
       <VideoCanvas />
-      <BlackPanel panelRef={panelRef} wrapRef={wrapRef} cols={cols} />
+      <BlackPanel panelRef={panelRef} wrapRef={wrapRef} cols={cols} items={items} />
       <WhiteOverlay />
       <Logo />
       <HeaderNav />
-      <Caption />
-      <ProductInfo />
+      <Caption text={settings.landing_caption} />
+      <ProductInfo label={settings.landing_label} bigText={settings.landing_big_text} />
       <ViewButton />
       <Footer />
       <Shoe3DCursor />

@@ -1,7 +1,10 @@
 import { motion } from 'motion/react'
 import { useViewport } from '../useViewport'
 
-export function ProductInfo() {
+const DEFAULT_LABEL = 'ARCHIVE COLLECTION\n"VANS"'
+const DEFAULT_BIG_TEXT = 'SHOP NOW'
+
+export function ProductInfo({ label, bigText }: { label?: string; bigText?: string }) {
   const { breakpoint } = useViewport()
   const desktop = breakpoint === 'desktop'
 
@@ -27,14 +30,12 @@ export function ProductInfo() {
             8
           </span>
         </div>
-        <div className="w-full text-center font-medium text-[20px] uppercase leading-[100%] tracking-[-0.04em] text-white lg:text-[30px]">
-          Archive Collection
-          <br />
-          {'"Vans"'}
+        <div className="w-full whitespace-pre-line text-center font-medium text-[20px] uppercase leading-[100%] tracking-[-0.04em] text-white lg:text-[30px]">
+          {label || DEFAULT_LABEL}
         </div>
       </div>
-      <div className="text-center font-medium text-[60px] leading-[100%] tracking-[-0.04em] text-white lg:text-[80px]">
-        $97,33
+      <div className="whitespace-pre-line break-words text-center font-medium text-[52px] uppercase leading-[100%] tracking-[-0.04em] text-white lg:text-[64px]">
+        {bigText || DEFAULT_BIG_TEXT}
       </div>
     </motion.div>
   )

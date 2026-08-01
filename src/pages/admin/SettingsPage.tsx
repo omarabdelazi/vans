@@ -1,11 +1,31 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api, type Settings } from '../../lib/api'
 
-const FIELDS: { key: string; label: string; hint?: string; dir?: 'ltr' }[] = [
+const FIELDS: { key: string; label: string; hint?: string; dir?: 'ltr'; multiline?: boolean }[] = [
   { key: 'instapay_number', label: 'رقم / عنوان انستا باي', hint: 'هيظهر للعميل في صفحة الدفع', dir: 'ltr' },
   { key: 'vodafone_cash_number', label: 'رقم فودافون كاش', hint: 'هيظهر للعميل في صفحة الدفع', dir: 'ltr' },
   { key: 'store_phone', label: 'تليفون المحل', hint: 'يظهر في الريسيت', dir: 'ltr' },
   { key: 'store_address', label: 'عنوان المحل', hint: 'يظهر في الريسيت' },
+  {
+    key: 'landing_caption',
+    label: 'النص التعريفي في الصفحة الرئيسية',
+    hint: 'الفقرة الصغيرة اللي بتظهر تحت اللوجو على شمال الشاشة',
+    dir: 'ltr',
+    multiline: true,
+  },
+  {
+    key: 'landing_label',
+    label: 'عنوان الكولكشن (فوق زرار view)',
+    hint: 'كل سطر هيظهر لوحده — مثلاً: ARCHIVE COLLECTION ثم "VANS"',
+    dir: 'ltr',
+    multiline: true,
+  },
+  {
+    key: 'landing_big_text',
+    label: 'النص الكبير (تحت عنوان الكولكشن)',
+    hint: 'مثلاً: SHOP NOW أو SHOW PRODUCTS أو سعر',
+    dir: 'ltr',
+  },
 ]
 
 export default function SettingsPage() {
@@ -44,12 +64,22 @@ export default function SettingsPage() {
           <label key={f.key} className="block">
             <span className="mb-1 block font-medium text-[14px]">{f.label}</span>
             {f.hint && <span className="mb-1 block font-medium text-[12px] text-black/40">{f.hint}</span>}
-            <input
-              dir={f.dir}
-              value={values[f.key] ?? ''}
-              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-              className="h-12 w-full border border-black/25 px-4 font-medium text-[14px] outline-none focus:border-black"
-            />
+            {f.multiline ? (
+              <textarea
+                dir={f.dir}
+                rows={3}
+                value={values[f.key] ?? ''}
+                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                className="w-full resize-none border border-black/25 px-4 py-3 font-medium text-[14px] outline-none focus:border-black"
+              />
+            ) : (
+              <input
+                dir={f.dir}
+                value={values[f.key] ?? ''}
+                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                className="h-12 w-full border border-black/25 px-4 font-medium text-[14px] outline-none focus:border-black"
+              />
+            )}
           </label>
         ))}
         {error && <p className="font-medium text-[13px] text-red-600">{error}</p>}
