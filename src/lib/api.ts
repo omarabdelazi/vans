@@ -98,8 +98,13 @@ export class ApiError extends Error {
 }
 
 export async function uploadFile(path: string, file: File): Promise<{ key: string; url: string }> {
+  const { compressImage } = await import('./images')
+  const compressed = await compressImage(file)
+  if (compressed.size > 1.2 * 1024 * 1024) {
+    throw new ApiError('الصورة كبيرة جداً — جرب صورة أصغر', 400)
+  }
   const form = new FormData()
-  form.append('file', file)
+  form.append('file', compressed)
   return api(path, { method: 'POST', body: form })
 }
 

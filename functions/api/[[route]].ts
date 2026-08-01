@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 
 type Env = {
   DB: D1Database
-  FILES: R2Bucket
   ADMIN_PASSWORD: string
   SESSION_SECRET: string
 }
@@ -75,6 +74,12 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL DEFAULT ''
+  )`,
+  `CREATE TABLE IF NOT EXISTS files (
+    key TEXT PRIMARY KEY,
+    mime TEXT NOT NULL,
+    data TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
   `INSERT OR IGNORE INTO settings (key, value) VALUES
     ('instapay_number', ''),
@@ -198,19 +203,31 @@ async function orderWithItems(db: D1Database, id: number) {
   return { ...order, items: items.results }
 }
 
+/**
+ * Images are stored inside D1 (base64) so no extra storage service is needed.
+ * The client compresses images before upload; 1.2MB binary stays safely under
+ * D1's row size limit after base64 encoding.
+ */
 async function saveUpload(
-  bucket: R2Bucket,
+  db: D1Database,
   file: File,
   prefix: string,
 ): Promise<{ key: string } | { error: string }> {
   if (!file || typeof file === 'string') return { error: 'file is required' }
   if (!file.type.startsWith('image/')) return { error: 'only images are allowed' }
-  if (file.size > 6 * 1024 * 1024) return { error: 'max file size is 6MB' }
+  if (file.size > 1.2 * 1024 * 1024) return { error: 'الصورة كبيرة — أقصى حجم 1MB' }
   const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
   const key = `${prefix}/${crypto.randomUUID()}.${ext}`
-  await bucket.put(key, file.stream(), {
-    httpMetadata: { contentType: file.type },
-  })
+  const buf = new Uint8Array(await file.arrayBuffer())
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < buf.length; i += chunk) {
+    binary += String.fromCharCode(...buf.subarray(i, i + chunk))
+  }
+  await db
+    .prepare('INSERT INTO files (key, mime, data) VALUES (?, ?, ?)')
+    .bind(key, file.type, btoa(binary))
+    .run()
   return { key }
 }
 
@@ -495,7 +512,7 @@ app.delete('/admin/products/:id', async (c) => {
 app.post('/upload-proof', async (c) => {
   const form = await c.req.formData().catch(() => null)
   const file = form?.get('file')
-  const res = await saveUpload(c.env.FILES, file as File, 'proofs')
+  const res = await saveUpload(c.env.DB, file as File, 'proofs')
   if ('error' in res) return bad(res.error)
   return c.json({ key: res.key, url: `/api/files/${res.key}` })
 })
@@ -503,18 +520,23 @@ app.post('/upload-proof', async (c) => {
 app.post('/admin/upload', async (c) => {
   const form = await c.req.formData().catch(() => null)
   const file = form?.get('file')
-  const res = await saveUpload(c.env.FILES, file as File, 'products')
+  const res = await saveUpload(c.env.DB, file as File, 'products')
   if ('error' in res) return bad(res.error)
   return c.json({ key: res.key, url: `/api/files/${res.key}` })
 })
 
 app.get('/files/*', async (c) => {
   const key = c.req.path.replace('/api/files/', '')
-  const obj = await c.env.FILES.get(key)
-  if (!obj) return bad('not found', 404)
-  return new Response(obj.body, {
+  const row = await c.env.DB.prepare('SELECT mime, data FROM files WHERE key = ?')
+    .bind(key)
+    .first<{ mime: string; data: string }>()
+  if (!row) return bad('not found', 404)
+  const bin = atob(row.data)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return new Response(bytes, {
     headers: {
-      'Content-Type': obj.httpMetadata?.contentType ?? 'application/octet-stream',
+      'Content-Type': row.mime,
       'Cache-Control': 'public, max-age=31536000, immutable',
     },
   })

@@ -1,7 +1,9 @@
 # vans
 
 Scroll-driven fashion landing page + full e-commerce store + Arabic admin
-dashboard, running on Cloudflare Pages (Functions + D1 + R2).
+dashboard, running on Cloudflare Pages (Functions + a single D1 database —
+uploaded images are compressed client-side and stored in D1, no other
+storage service needed).
 
 - **Landing** (`/`): cursor-scrubbed video hero, exclusion-blended overlays, a
   3D sneaker that follows the mouse, and a scroll gallery ending in a "view" CTA.
