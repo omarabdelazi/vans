@@ -8,6 +8,7 @@ import {
   type ProductDetail,
 } from '../../lib/api'
 import { useCart } from '../../lib/cart'
+import { ensureModelViewer } from '../../lib/modelViewer'
 
 export default function ProductPage() {
   const { id } = useParams()
@@ -21,7 +22,7 @@ export default function ProductPage() {
   const [added, setAdded] = useState(false)
 
   useEffect(() => {
-    import('@google/model-viewer')
+    ensureModelViewer()
   }, [])
 
   useEffect(() => {

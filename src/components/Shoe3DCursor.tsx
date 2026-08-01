@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { ensureModelViewer } from '../lib/modelViewer'
 
 /**
  * Desktop-only cursor: a slowly spinning 3D sneaker that follows the mouse.
@@ -8,7 +9,7 @@ export function Shoe3DCursor() {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    import('@google/model-viewer')
+    ensureModelViewer()
   }, [])
 
   useEffect(() => {
