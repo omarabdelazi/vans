@@ -742,6 +742,7 @@ app.post('/orders', async (c) => {
 app.get('/admin/orders', async (c) => {
   const status = c.req.query('status')
   const source = c.req.query('source')
+  const q = c.req.query('q')?.trim()
   const where: string[] = []
   const binds: unknown[] = []
   if (status) {
@@ -751,6 +752,25 @@ app.get('/admin/orders', async (c) => {
   if (source) {
     where.push('source = ?')
     binds.push(source)
+  }
+  if (q) {
+    // "VANS-00012", "#12" or "12" → order/receipt number; long digit runs
+    // also match the customer phone; anything else matches the customer
+    // name, phone, or an item's product code/name inside the order.
+    const compact = q.replace(/\s/g, '')
+    const orderNo = compact.match(/^(?:vans-?|#)?(\d+)$/i)?.[1]
+    if (orderNo) {
+      where.push('(o.id = ? OR o.phone LIKE ?)')
+      binds.push(Number(orderNo), `%${orderNo}%`)
+    } else {
+      const like = `%${q}%`
+      where.push(
+        `(o.customer_name LIKE ? OR o.phone LIKE ? OR EXISTS (
+          SELECT 1 FROM order_items oi WHERE oi.order_id = o.id
+            AND (oi.code LIKE ? OR oi.name LIKE ?)))`,
+      )
+      binds.push(like, like, like, like)
+    }
   }
   const rows = await c.env.DB.prepare(
     `SELECT o.*, (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) AS item_count

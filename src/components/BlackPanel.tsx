@@ -5,6 +5,9 @@ import { buildLayout } from '../layout'
 export interface GalleryItem {
   img: string
   link?: string
+  /** contain = show the whole photo on a white card (product shots);
+   *  cover (default) = fill the cell, cropping if needed. */
+  fit?: 'cover' | 'contain'
 }
 
 interface BlackPanelProps {
@@ -29,9 +32,10 @@ export function BlackPanel({ panelRef, wrapRef, cols, items }: BlackPanelProps) 
             row.map((itemIdx, c) => {
               if (itemIdx === -1) return <div key={`${r}-${c}`} className="aspect-[2/3]" />
               const item = items[itemIdx]
+              const contain = item.fit === 'contain'
               const card = (
                 <div
-                  className="bp-card h-full w-full"
+                  className={`bp-card flex h-full w-full items-center justify-center ${contain ? 'bg-white' : ''}`}
                   style={{
                     transform: 'scale(0)',
                     transformOrigin: c < cols / 2 ? 'right bottom' : 'left bottom',
@@ -40,7 +44,7 @@ export function BlackPanel({ panelRef, wrapRef, cols, items }: BlackPanelProps) 
                   <img
                     src={item.img}
                     alt={`Product ${itemIdx + 1}`}
-                    className="h-full w-full object-cover"
+                    className={`h-full w-full ${contain ? 'object-contain' : 'object-cover'}`}
                     draggable={false}
                   />
                 </div>

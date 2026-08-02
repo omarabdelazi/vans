@@ -41,7 +41,11 @@ export default function Landing() {
         const withPhotos = products
           .filter((p) => p.image_url)
           .slice(0, 12)
-          .map((p) => ({ img: p.image_url, link: `/product/${p.id}` }))
+          .map<GalleryItem>((p) => ({
+            img: p.image_url,
+            link: `/product/${p.id}`,
+            fit: 'contain',
+          }))
         if (withPhotos.length) setItems(withPhotos)
       })
       .catch(() => {})

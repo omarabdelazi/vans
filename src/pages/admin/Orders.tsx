@@ -11,6 +11,10 @@ const TABS = [
   { key: 'rejected', label: 'مرفوض' },
 ]
 
+function localDay(sqlUtc: string): string {
+  return new Date(`${sqlUtc.replace(' ', 'T')}Z`).toLocaleDateString('en-CA')
+}
+
 export default function Orders() {
   const [tab, setTab] = useState('pending')
   const [orders, setOrders] = useState<Order[]>([])
@@ -18,17 +22,25 @@ export default function Orders() {
   const [receipt, setReceipt] = useState<Order | null>(null)
   const [settings, setSettings] = useState<Settings>({})
   const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
+  const [day, setDay] = useState('')
 
-  const load = (status = tab) => {
-    const qs = status ? `?status=${status}` : ''
-    api<Order[]>(`/admin/orders${qs}`)
+  const load = (status = tab, q = query) => {
+    const qs = new URLSearchParams()
+    if (status) qs.set('status', status)
+    if (q.trim()) qs.set('q', q.trim())
+    api<Order[]>(`/admin/orders?${qs}`)
       .then(setOrders)
       .catch((e) => setError(e.message))
   }
 
   useEffect(() => {
-    load(tab)
-  }, [tab])
+    const t = setTimeout(() => load(tab, query), 250)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, query])
+
+  const visible = day ? orders.filter((o) => localDay(o.created_at) === day) : orders
 
   useEffect(() => {
     api<Settings>('/settings')
@@ -73,10 +85,48 @@ export default function Orders() {
           </button>
         ))}
       </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="بحث برقم الريسيت (VANS-00012) أو التليفون أو كود/اسم القطعة…"
+          className="h-11 w-full max-w-md border border-black/25 bg-white px-4 font-medium text-[14px] outline-none focus:border-black"
+        />
+        <input
+          type="date"
+          value={day}
+          onChange={(e) => setDay(e.target.value)}
+          className="h-11 border border-black/25 bg-white px-3 font-medium text-[14px] outline-none focus:border-black"
+        />
+        <button
+          type="button"
+          onClick={() => setDay(new Date().toLocaleDateString('en-CA'))}
+          className={`h-11 rounded-full border px-4 font-medium text-[13px] ${
+            day === new Date().toLocaleDateString('en-CA')
+              ? 'border-black bg-black text-white'
+              : 'border-black/20 bg-white'
+          }`}
+        >
+          طلبات النهارده
+        </button>
+        {(query || day) && (
+          <button
+            type="button"
+            onClick={() => {
+              setQuery('')
+              setDay('')
+            }}
+            className="h-11 px-3 font-medium text-[13px] text-black/60 underline"
+          >
+            ✕ مسح الفلاتر
+          </button>
+        )}
+      </div>
       {error && <p className="mb-3 font-medium text-[13px] text-red-600">{error}</p>}
 
       <div className="flex flex-col gap-2">
-        {orders.map((o) => (
+        {visible.map((o) => (
           <button
             key={o.id}
             type="button"
@@ -100,8 +150,8 @@ export default function Orders() {
             <StatusBadge status={o.status} />
           </button>
         ))}
-        {orders.length === 0 && (
-          <p className="py-12 text-center font-medium text-black/40">لا توجد طلبات هنا.</p>
+        {visible.length === 0 && (
+          <p className="py-12 text-center font-medium text-black/40">لا توجد طلبات مطابقة هنا.</p>
         )}
       </div>
 
