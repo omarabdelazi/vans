@@ -19,12 +19,17 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
   const previewRef = useRef<HTMLDivElement>(null)
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
   const [errorMsg, setErrorMsg] = useState('')
+  const [attempt, setAttempt] = useState(0)
+  const [slow, setSlow] = useState(false)
 
   const [detail, setDetail] = useState('')
 
   useEffect(() => {
     let instance: DeepARInstance | null = null
     let cancelled = false
+    setPhase('loading')
+    setSlow(false)
+    const slowTimer = setTimeout(() => setSlow(true), 8000)
     ;(async () => {
       try {
         const deepar = await import('deepar')
@@ -43,7 +48,7 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
         const dar = await Promise.race([
           init,
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('deepar-init-timeout')), 30_000),
+            setTimeout(() => reject(new Error('deepar-init-timeout')), 90_000),
           ),
         ])
         if (cancelled) {
@@ -66,7 +71,7 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
           )
         } else if (/timeout/i.test(msg)) {
           setErrorMsg(
-            'التحميل خد وقت أطول من اللازم — اتأكد من سرعة النت وجرب تاني، ولو استمرت اتأكد إن الدومين مسجّل في developer.deepar.ai',
+            'التحميل خد وقت طويل — دوس "جرّب تاني": اللي اتحمّل اتخزن وهيكمّل أسرع بكتير',
           )
         } else {
           setErrorMsg('مقدرناش نشغّل التجربة — جرّب تاني أو من متصفح مختلف')
@@ -75,10 +80,11 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
     })()
     return () => {
       cancelled = true
+      clearTimeout(slowTimer)
       instance?.shutdown()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectUrl, licenseKey])
+  }, [effectUrl, licenseKey, attempt])
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black" style={{ cursor: 'auto' }}>
@@ -101,10 +107,18 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
       </div>
 
       {phase === 'loading' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-          <p className="animate-pulse px-6 text-center font-medium text-[16px] text-white" dir="rtl">
-            جاري تشغيل الكاميرا وتجهيز تتبع القدم… ثواني
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 px-6">
+          <p className="animate-pulse text-center font-medium text-[16px] text-white" dir="rtl">
+            جاري تشغيل الكاميرا وتجهيز تتبع القدم…
           </p>
+          <p className="text-center font-medium text-[13px] text-white/60" dir="rtl">
+            لو المتصفح طلب إذن الكاميرا، اسمح بيه ✅
+          </p>
+          {slow && (
+            <p className="text-center font-medium text-[13px] text-white/60" dir="rtl">
+              أول مرة بياخد وقت أطول شوية علشان بيحمّل محرك التتبع — المرات الجاية هتفتح فورًا
+            </p>
+          )}
         </div>
       )}
 
@@ -126,13 +140,22 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
               {detail}
             </p>
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full bg-white px-6 py-3 font-medium text-[14px] uppercase text-black"
-          >
-            رجوع
-          </button>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setAttempt((a) => a + 1)}
+              className="rounded-full bg-white px-6 py-3 font-medium text-[14px] text-black"
+            >
+              🔄 جرّب تاني
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full border border-white/40 px-6 py-3 font-medium text-[14px] text-white"
+            >
+              رجوع
+            </button>
+          </div>
         </div>
       )}
     </div>

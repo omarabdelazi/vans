@@ -10,6 +10,7 @@ import {
 import { useCart } from '../../lib/cart'
 import { ensureModelViewer } from '../../lib/modelViewer'
 import { DeepARTryOn } from '../../components/DeepARTryOn'
+import { warmupDeepAR } from '../../lib/deeparWarmup'
 
 type ARViewer = HTMLElement & {
   activateAR?: () => Promise<void>
@@ -37,6 +38,10 @@ export default function ProductPage() {
       .then((s) => setLicenseKey(s.deepar_license_key ?? ''))
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (product?.deepar_url && licenseKey) warmupDeepAR(product.deepar_url)
+  }, [product?.deepar_url, licenseKey])
 
   useEffect(() => {
     ensureModelViewer()
