@@ -30,13 +30,13 @@ export default function Landing() {
   const [settings, setSettings] = useState<Settings>({})
   const [items, setItems] = useState<GalleryItem[]>(FALLBACK_ITEMS)
 
-  // The gallery shows the store's real products (falling back to the
-  // built-in editorial shots until products with photos exist).
+  // The gallery shows only the products marked as featured in the admin
+  // dashboard (falling back to the built-in editorial shots until some are).
   useEffect(() => {
     api<Settings>('/settings')
       .then(setSettings)
       .catch(() => {})
-    api<Product[]>('/products')
+    api<Product[]>('/products?featured=1')
       .then((products) => {
         const withPhotos = products
           .filter((p) => p.image_url)

@@ -20,6 +20,7 @@ interface FormState {
   image_url: string
   model_url: string
   has_ar: boolean
+  featured: boolean
   active: boolean
   sizes: Record<number, string>
 }
@@ -35,6 +36,7 @@ const emptyForm: FormState = {
   image_url: '',
   model_url: '',
   has_ar: false,
+  featured: false,
   active: true,
   sizes: Object.fromEntries(SIZES.map((s) => [s, '0'])),
 }
@@ -74,6 +76,7 @@ export default function ProductForm() {
           image_url: p.image_url,
           model_url: p.model_url,
           has_ar: p.has_ar === 1,
+          featured: p.featured === 1,
           active: p.active === 1,
           sizes: Object.fromEntries(
             SIZES.map((s) => [s, String(p.sizes.find((x) => x.size === s)?.stock ?? 0)]),
@@ -131,6 +134,7 @@ export default function ProductForm() {
         image_url: form.image_url,
         model_url: form.model_url,
         has_ar: form.has_ar && !!form.model_url,
+        featured: form.featured,
         active: form.active,
         sizes: SIZES.map((s) => ({ size: s, stock: Number(form.sizes[s]) || 0 })),
       }
@@ -342,6 +346,22 @@ export default function ProductForm() {
           />
           معروض في المتجر
         </label>
+
+        <div className="border border-black/10 bg-neutral-50 p-4">
+          <label className="flex items-center gap-2 font-medium text-[15px]">
+            <input
+              type="checkbox"
+              checked={form.featured}
+              onChange={(e) => set('featured', e.target.checked)}
+              className="h-4 w-4 accent-black"
+            />
+            ⭐ يظهر في الصفحة الرئيسية (جاليري السكرول)
+          </label>
+          <p className="mt-1 font-medium text-[12px] text-black/50">
+            الصفحة الرئيسية بتعرض المنتجات المعلّمة دي بس (لازم يكون للمنتج صورة). لو مفيش ولا
+            منتج متعلّم، بتظهر صور افتراضية.
+          </p>
+        </div>
 
         {error && <p className="font-medium text-[13px] text-red-600">{error}</p>}
         <div className="flex gap-3">

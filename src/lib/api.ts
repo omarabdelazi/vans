@@ -19,6 +19,7 @@ export interface Product {
   image_url: string
   model_url: string
   has_ar: number
+  featured: number
   active: number
   total_stock: number
   created_at: string

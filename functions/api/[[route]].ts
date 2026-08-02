@@ -31,6 +31,7 @@ const SCHEMA = [
     image_url TEXT NOT NULL DEFAULT '',
     model_url TEXT NOT NULL DEFAULT '',
     has_ar INTEGER NOT NULL DEFAULT 0,
+    featured INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
@@ -104,9 +105,14 @@ let migrated = false
 async function ensureSchema(db: D1Database) {
   if (migrated) return
   await db.batch(SCHEMA.map((sql) => db.prepare(sql)))
-  // Older deployments created `files` without the chunks column.
+  // Older deployments created `files` without the chunks column and
+  // `products` without the featured flag.
   await db
     .prepare('ALTER TABLE files ADD COLUMN chunks INTEGER NOT NULL DEFAULT 0')
+    .run()
+    .catch(() => {})
+  await db
+    .prepare('ALTER TABLE products ADD COLUMN featured INTEGER NOT NULL DEFAULT 0')
     .run()
     .catch(() => {})
   migrated = true
@@ -370,6 +376,9 @@ app.get('/products', async (c) => {
   const search = c.req.query('search')
   const where: string[] = ['p.active = 1']
   const binds: unknown[] = []
+  if (c.req.query('featured') === '1') {
+    where.push('p.featured = 1')
+  }
   if (category) {
     where.push('c.slug = ?')
     binds.push(category)
@@ -427,6 +436,7 @@ interface ProductBody {
   image_url?: string
   model_url?: string
   has_ar?: boolean
+  featured?: boolean
   active?: boolean
   sizes?: { size: number; stock: number }[]
 }
@@ -459,8 +469,8 @@ app.post('/admin/products', async (c) => {
   if (!(Number(b.price) > 0)) return bad('السعر مطلوب')
   try {
     const res = await c.env.DB.prepare(
-      `INSERT INTO products (code, name, description, category_id, price, sale_price, on_sale, image_url, model_url, has_ar, active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO products (code, name, description, category_id, price, sale_price, on_sale, image_url, model_url, has_ar, featured, active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         b.code.trim(),
@@ -473,6 +483,7 @@ app.post('/admin/products', async (c) => {
         b.image_url ?? '',
         b.model_url ?? '',
         b.has_ar ? 1 : 0,
+        b.featured ? 1 : 0,
         b.active === false ? 0 : 1,
       )
       .run()
@@ -492,7 +503,7 @@ app.put('/admin/products/:id', async (c) => {
   try {
     await c.env.DB.prepare(
       `UPDATE products SET code = ?, name = ?, description = ?, category_id = ?, price = ?,
-        sale_price = ?, on_sale = ?, image_url = ?, model_url = ?, has_ar = ?, active = ?
+        sale_price = ?, on_sale = ?, image_url = ?, model_url = ?, has_ar = ?, featured = ?, active = ?
        WHERE id = ?`,
     )
       .bind(
@@ -506,6 +517,7 @@ app.put('/admin/products/:id', async (c) => {
         b.image_url ?? '',
         b.model_url ?? '',
         b.has_ar ? 1 : 0,
+        b.featured ? 1 : 0,
         b.active === false ? 0 : 1,
         id,
       )

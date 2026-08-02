@@ -93,6 +93,9 @@ export default function Products() {
                 </td>
                 <td className="p-3">
                   <span className="flex gap-1">
+                    {p.featured === 1 && (
+                      <span className="bg-yellow-400 px-1.5 py-0.5 text-[11px]">⭐ رئيسية</span>
+                    )}
                     {p.model_url && (
                       <span className="border border-black px-1.5 py-0.5 text-[11px]">3D</span>
                     )}
