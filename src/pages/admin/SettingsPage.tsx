@@ -26,6 +26,12 @@ const FIELDS: { key: string; label: string; hint?: string; dir?: 'ltr'; multilin
     hint: 'مثلاً: SHOP NOW أو SHOW PRODUCTS أو سعر',
     dir: 'ltr',
   },
+  {
+    key: 'deepar_license_key',
+    label: 'مفتاح ترخيص DeepAR',
+    hint: 'من developer.deepar.ai — مطلوب لخاصية تجربة الشوز على الرجل بالكاميرا',
+    dir: 'ltr',
+  },
 ]
 
 export default function SettingsPage() {

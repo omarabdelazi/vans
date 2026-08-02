@@ -9,6 +9,7 @@ import {
 } from '../../lib/api'
 import { useCart } from '../../lib/cart'
 import { ensureModelViewer } from '../../lib/modelViewer'
+import { DeepARTryOn } from '../../components/DeepARTryOn'
 
 type ARViewer = HTMLElement & {
   activateAR?: () => Promise<void>
@@ -27,7 +28,15 @@ export default function ProductPage() {
   const [qty, setQty] = useState(1)
   const [added, setAdded] = useState(false)
   const [arMsg, setArMsg] = useState('')
+  const [tryOnOpen, setTryOnOpen] = useState(false)
+  const [licenseKey, setLicenseKey] = useState('')
   const viewerRef = useRef<ARViewer | null>(null)
+
+  useEffect(() => {
+    api<Record<string, string>>('/settings')
+      .then((s) => setLicenseKey(s.deepar_license_key ?? ''))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     ensureModelViewer()
@@ -134,24 +143,38 @@ export default function ProductPage() {
             </div>
           )}
         </div>
+        {product.deepar_url && licenseKey && (
+          <>
+            <button
+              type="button"
+              onClick={() => setTryOnOpen(true)}
+              className="mt-3 flex h-12 w-full items-center justify-center gap-2 bg-black font-medium text-[14px] uppercase text-white"
+            >
+              👟 Try it on your feet — جرّبه على رجلك
+            </button>
+            <p className="mt-2 font-medium text-[12px] text-black/50" dir="rtl">
+              بيفتح الكاميرا والشوز بيركب على رجلك ويتحرك معاها مباشرة — أفضل تجربة من الموبايل.
+            </p>
+          </>
+        )}
         {product.has_ar === 1 && product.model_url && (
           <>
             <button
               type="button"
               onClick={() => tryOnAR()}
-              className="mt-3 flex h-12 w-full items-center justify-center gap-2 bg-black font-medium text-[14px] uppercase text-white"
+              className={`mt-3 flex h-12 w-full items-center justify-center gap-2 font-medium text-[14px] uppercase ${
+                product.deepar_url && licenseKey
+                  ? 'border border-black text-black'
+                  : 'bg-black text-white'
+              }`}
             >
-              👟 See it in AR — شوفه قدامك بالكاميرا
+              ✨ See it in AR — شوفه قدامك في الفراغ
             </button>
             {arMsg && (
               <p className="mt-2 font-medium text-[13px] text-red-600" dir="rtl">
                 {arMsg}
               </p>
             )}
-            <p className="mt-2 font-medium text-[12px] text-black/50" dir="rtl">
-              بيفتح الكاميرا ويحط الشوز قدامك بحجمه الحقيقي وإضاءة واقعية — قرّبه من رجلك ولف
-              حواليه. (من الموبايل)
-            </p>
           </>
         )}
       </div>
@@ -262,6 +285,14 @@ export default function ProductPage() {
           </button>
         )}
       </div>
+
+      {tryOnOpen && product.deepar_url && licenseKey && (
+        <DeepARTryOn
+          effectUrl={product.deepar_url}
+          licenseKey={licenseKey}
+          onClose={() => setTryOnOpen(false)}
+        />
+      )}
     </div>
   )
 }

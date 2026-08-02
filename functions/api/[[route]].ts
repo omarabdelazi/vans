@@ -30,6 +30,7 @@ const SCHEMA = [
     on_sale INTEGER NOT NULL DEFAULT 0,
     image_url TEXT NOT NULL DEFAULT '',
     model_url TEXT NOT NULL DEFAULT '',
+    deepar_url TEXT NOT NULL DEFAULT '',
     has_ar INTEGER NOT NULL DEFAULT 0,
     featured INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
@@ -97,7 +98,8 @@ const SCHEMA = [
     ('landing_caption', 'VANS independent shoe store — EU sizes 35-44, delivered all over Egypt. Pay with InstaPay, Vodafone Cash, or cash on delivery.'),
     ('landing_label', 'ARCHIVE COLLECTION
 "VANS"'),
-    ('landing_big_text', 'SHOP NOW')`,
+    ('landing_big_text', 'SHOP NOW'),
+    ('deepar_license_key', 'c48fd3db07fa753c2c5b28bea0f7f784939aa0fd4eccfed133aba6d29bf451efcb5defe679f48a62')`,
 ]
 
 let migrated = false
@@ -113,6 +115,10 @@ async function ensureSchema(db: D1Database) {
     .catch(() => {})
   await db
     .prepare('ALTER TABLE products ADD COLUMN featured INTEGER NOT NULL DEFAULT 0')
+    .run()
+    .catch(() => {})
+  await db
+    .prepare("ALTER TABLE products ADD COLUMN deepar_url TEXT NOT NULL DEFAULT ''")
     .run()
     .catch(() => {})
   migrated = true
@@ -435,6 +441,7 @@ interface ProductBody {
   on_sale?: boolean
   image_url?: string
   model_url?: string
+  deepar_url?: string
   has_ar?: boolean
   featured?: boolean
   active?: boolean
@@ -469,8 +476,8 @@ app.post('/admin/products', async (c) => {
   if (!(Number(b.price) > 0)) return bad('السعر مطلوب')
   try {
     const res = await c.env.DB.prepare(
-      `INSERT INTO products (code, name, description, category_id, price, sale_price, on_sale, image_url, model_url, has_ar, featured, active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO products (code, name, description, category_id, price, sale_price, on_sale, image_url, model_url, deepar_url, has_ar, featured, active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         b.code.trim(),
@@ -482,6 +489,7 @@ app.post('/admin/products', async (c) => {
         b.on_sale ? 1 : 0,
         b.image_url ?? '',
         b.model_url ?? '',
+        b.deepar_url ?? '',
         b.has_ar ? 1 : 0,
         b.featured ? 1 : 0,
         b.active === false ? 0 : 1,
@@ -503,7 +511,7 @@ app.put('/admin/products/:id', async (c) => {
   try {
     await c.env.DB.prepare(
       `UPDATE products SET code = ?, name = ?, description = ?, category_id = ?, price = ?,
-        sale_price = ?, on_sale = ?, image_url = ?, model_url = ?, has_ar = ?, featured = ?, active = ?
+        sale_price = ?, on_sale = ?, image_url = ?, model_url = ?, deepar_url = ?, has_ar = ?, featured = ?, active = ?
        WHERE id = ?`,
     )
       .bind(
@@ -516,6 +524,7 @@ app.put('/admin/products/:id', async (c) => {
         b.on_sale ? 1 : 0,
         b.image_url ?? '',
         b.model_url ?? '',
+        b.deepar_url ?? '',
         b.has_ar ? 1 : 0,
         b.featured ? 1 : 0,
         b.active === false ? 0 : 1,
@@ -571,15 +580,18 @@ app.post('/admin/upload-model', async (c) => {
   const form = await c.req.formData().catch(() => null)
   const file = form?.get('file') as File | null
   if (!file || typeof file === 'string') return bad('file is required')
-  if (!file.name.toLowerCase().endsWith('.glb')) return bad('الملف لازم يكون بصيغة GLB')
+  const name = file.name.toLowerCase()
+  const isGlb = name.endsWith('.glb')
+  const isDeepar = name.endsWith('.deepar')
+  if (!isGlb && !isDeepar) return bad('الملف لازم يكون بصيغة GLB أو DEEPAR')
   if (file.size > MODEL_MAX_BYTES) {
-    return bad('الموديل أكبر من 10MB — ابعته لكلود يضغطه الأول أو صغّره وحاول تاني')
+    return bad('الملف أكبر من 10MB — ابعته لكلود يضغطه الأول أو صغّره وحاول تاني')
   }
   const buf = new Uint8Array(await file.arrayBuffer())
-  if (buf.length < 12 || String.fromCharCode(buf[0], buf[1], buf[2], buf[3]) !== 'glTF') {
+  if (isGlb && (buf.length < 12 || String.fromCharCode(buf[0], buf[1], buf[2], buf[3]) !== 'glTF')) {
     return bad('الملف مش GLB سليم')
   }
-  const key = `models/${crypto.randomUUID()}.glb`
+  const key = `models/${crypto.randomUUID()}.${isGlb ? 'glb' : 'deepar'}`
   const stmts = []
   let chunkCount = 0
   for (let off = 0; off < buf.length; off += MODEL_CHUNK_BYTES) {
@@ -592,8 +604,9 @@ app.post('/admin/upload-model', async (c) => {
     )
   }
   stmts.push(
-    c.env.DB.prepare("INSERT INTO files (key, mime, data, chunks) VALUES (?, 'model/gltf-binary', '', ?)").bind(
+    c.env.DB.prepare('INSERT INTO files (key, mime, data, chunks) VALUES (?, ?, \'\', ?)').bind(
       key,
+      isGlb ? 'model/gltf-binary' : 'application/octet-stream',
       chunkCount,
     ),
   )

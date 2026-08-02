@@ -19,6 +19,7 @@ interface FormState {
   sale_price: string
   image_url: string
   model_url: string
+  deepar_url: string
   has_ar: boolean
   featured: boolean
   active: boolean
@@ -35,6 +36,7 @@ const emptyForm: FormState = {
   sale_price: '',
   image_url: '',
   model_url: '',
+  deepar_url: '',
   has_ar: false,
   featured: false,
   active: true,
@@ -75,6 +77,7 @@ export default function ProductForm() {
           sale_price: p.sale_price != null ? String(p.sale_price) : '',
           image_url: p.image_url,
           model_url: p.model_url,
+          deepar_url: p.deepar_url,
           has_ar: p.has_ar === 1,
           featured: p.featured === 1,
           active: p.active === 1,
@@ -118,6 +121,20 @@ export default function ProductForm() {
     }
   }
 
+  const onUploadDeepar = async (file: File | undefined) => {
+    if (!file) return
+    setUploadingModel(true)
+    setError('')
+    try {
+      const res = await uploadModel(file)
+      set('deepar_url', res.url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'فشل رفع الملف')
+    } finally {
+      setUploadingModel(false)
+    }
+  }
+
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setSaving(true)
@@ -133,6 +150,7 @@ export default function ProductForm() {
         sale_price: form.on_sale && form.sale_price ? Number(form.sale_price) : null,
         image_url: form.image_url,
         model_url: form.model_url,
+        deepar_url: form.deepar_url,
         has_ar: form.has_ar && !!form.model_url,
         featured: form.featured,
         active: form.active,
@@ -315,6 +333,32 @@ export default function ProductForm() {
             لو الملف أكبر من 10MB ابعته لكلود في الشات يضغطه — وبعد الحفظ هيظهر للعميل زرار
             "TRY ON" في صفحة المنتج.
           </p>
+
+          <div className="mt-4 border-t border-black/10 pt-4">
+            <p className="mb-1 font-medium text-[14px]">
+              👟 ملف تجربة القدم المباشرة (.deepar) — اختياري
+            </p>
+            <p className="mb-2 font-medium text-[12px] text-black/50">
+              بتصدّره من برنامج DeepAR Studio — لما تضيفه، العميل هيقدر يجرب الشوز على رجله
+              بالكاميرا بتتبع حقيقي. للتجربة استخدم الرابط الجاهز /effects/vans-shoe.deepar
+            </p>
+            <input
+              type="file"
+              accept=".deepar"
+              onChange={(e) => {
+                onUploadDeepar(e.target.files?.[0])
+                e.target.value = ''
+              }}
+              className="block w-full font-medium text-[13px] file:ml-3 file:border file:border-black file:bg-white file:px-4 file:py-2 file:font-medium"
+            />
+            <input
+              dir="ltr"
+              value={form.deepar_url}
+              onChange={(e) => set('deepar_url', e.target.value)}
+              placeholder="/effects/vans-shoe.deepar أو رابط الملف المرفوع"
+              className={`${inputCls} mt-2`}
+            />
+          </div>
         </div>
 
         <div>

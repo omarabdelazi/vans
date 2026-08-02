@@ -18,6 +18,7 @@ export interface Product {
   on_sale: number
   image_url: string
   model_url: string
+  deepar_url: string
   has_ar: number
   featured: number
   active: number
