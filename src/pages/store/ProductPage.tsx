@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   api,
@@ -9,7 +9,12 @@ import {
 } from '../../lib/api'
 import { useCart } from '../../lib/cart'
 import { ensureModelViewer } from '../../lib/modelViewer'
-import { TryOn } from '../../components/TryOn'
+
+type ARViewer = HTMLElement & {
+  activateAR?: () => Promise<void>
+  canActivateAR?: boolean
+  loaded?: boolean
+}
 
 export default function ProductPage() {
   const { id } = useParams()
@@ -21,7 +26,8 @@ export default function ProductPage() {
   const [size, setSize] = useState<number | null>(null)
   const [qty, setQty] = useState(1)
   const [added, setAdded] = useState(false)
-  const [tryOnOpen, setTryOnOpen] = useState(false)
+  const [arMsg, setArMsg] = useState('')
+  const viewerRef = useRef<ARViewer | null>(null)
 
   useEffect(() => {
     ensureModelViewer()
@@ -48,6 +54,26 @@ export default function ProductPage() {
   const stockFor = (s: number) => product.sizes.find((x) => x.size === s)?.stock ?? 0
   const selectedStock = size != null ? stockFor(size) : 0
   const price = effectivePrice(product)
+
+  // Launch the device's native AR (Quick Look on iOS, Scene Viewer on
+  // Android): real lighting, shadows, and true-to-size placement.
+  const tryOnAR = (tries = 0) => {
+    if (tries === 0) {
+      setArMsg('')
+      if (view !== '3d') setView('3d')
+    }
+    const v = viewerRef.current
+    if (!v || !v.loaded) {
+      if (tries < 60) setTimeout(() => tryOnAR(tries + 1), 150)
+      else setArMsg('الموديل واخد وقت في التحميل — حاول تاني بعد ثواني')
+      return
+    }
+    if (v.canActivateAR === false) {
+      setArMsg('التجربة بالكاميرا بتشتغل من الموبايل — افتح صفحة المنتج من تليفونك 📱')
+      return
+    }
+    v.activateAR?.()
+  }
 
   const addToCart = () => {
     if (size == null) return
@@ -78,8 +104,10 @@ export default function ProductPage() {
         <div className="relative aspect-square overflow-hidden bg-neutral-100">
           {view === '3d' && product.model_url ? (
             <model-viewer
+              ref={viewerRef}
               src={product.model_url}
               alt={product.name}
+              loading="eager"
               camera-controls
               auto-rotate
               interaction-prompt="none"
@@ -110,14 +138,19 @@ export default function ProductPage() {
           <>
             <button
               type="button"
-              onClick={() => setTryOnOpen(true)}
+              onClick={() => tryOnAR()}
               className="mt-3 flex h-12 w-full items-center justify-center gap-2 bg-black font-medium text-[14px] uppercase text-white"
             >
-              👟 Try it on your feet — جرّبه على رجلك
+              👟 See it in AR — شوفه قدامك بالكاميرا
             </button>
-            <p className="mt-2 font-medium text-[12px] text-black/50">
-              Opens your camera and puts the shoe on your foot live. Works best on your phone —
-              بيفتح الكاميرا والشوز بيتركب على رجلك مباشرة.
+            {arMsg && (
+              <p className="mt-2 font-medium text-[13px] text-red-600" dir="rtl">
+                {arMsg}
+              </p>
+            )}
+            <p className="mt-2 font-medium text-[12px] text-black/50" dir="rtl">
+              بيفتح الكاميرا ويحط الشوز قدامك بحجمه الحقيقي وإضاءة واقعية — قرّبه من رجلك ولف
+              حواليه. (من الموبايل)
             </p>
           </>
         )}
@@ -229,10 +262,6 @@ export default function ProductPage() {
           </button>
         )}
       </div>
-
-      {tryOnOpen && product.model_url && (
-        <TryOn modelUrl={product.model_url} onClose={() => setTryOnOpen(false)} />
-      )}
     </div>
   )
 }
