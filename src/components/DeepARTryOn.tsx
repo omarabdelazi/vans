@@ -20,23 +20,32 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
   const [errorMsg, setErrorMsg] = useState('')
 
+  const [detail, setDetail] = useState('')
+
   useEffect(() => {
     let instance: DeepARInstance | null = null
     let cancelled = false
     ;(async () => {
       try {
         const deepar = await import('deepar')
-        const dar = await deepar.initialize({
+        // The SDK resolves its runtime (wasm + tracking models) from its
+        // versioned CDN by default, which guarantees every file exists.
+        const init = deepar.initialize({
           licenseKey,
           previewElement: previewRef.current!,
           effect: effectUrl,
-          rootPath: '/deepar',
           additionalOptions: {
             cameraConfig: {
               facingMode: 'environment',
             },
           },
         })
+        const dar = await Promise.race([
+          init,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('deepar-init-timeout')), 30_000),
+          ),
+        ])
         if (cancelled) {
           dar.shutdown()
           return
@@ -45,14 +54,22 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
         setPhase('ready')
       } catch (err) {
         if (cancelled) return
-        const msg = String(err)
+        console.error('DeepAR init failed:', err)
+        const msg = err instanceof Error ? err.message : String(err)
         setPhase('error')
+        setDetail(msg.slice(0, 160))
         if (/denied|permission|NotAllowed/i.test(msg)) {
           setErrorMsg('محتاجين إذن الكاميرا — اسمح بالكاميرا من المتصفح وحاول تاني')
-        } else if (/license/i.test(msg)) {
-          setErrorMsg('مشكلة في ترخيص DeepAR — اتأكد إن الدومين مسجّل في مشروعك على developer.deepar.ai')
+        } else if (/license|validate|401|403/i.test(msg)) {
+          setErrorMsg(
+            'مشكلة في الترخيص — اتأكد إن الدومين vans-yxm.pages.dev مضاف في مشروعك على developer.deepar.ai',
+          )
+        } else if (/timeout/i.test(msg)) {
+          setErrorMsg(
+            'التحميل خد وقت أطول من اللازم — اتأكد من سرعة النت وجرب تاني، ولو استمرت اتأكد إن الدومين مسجّل في developer.deepar.ai',
+          )
         } else {
-          setErrorMsg('مقدرناش نشغّل التجربة على الجهاز ده — جرّب من متصفح تاني أو تأكد من النت')
+          setErrorMsg('مقدرناش نشغّل التجربة — جرّب تاني أو من متصفح مختلف')
         }
       }
     })()
@@ -104,6 +121,11 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
           <p className="font-medium text-[16px] leading-relaxed text-white" dir="rtl">
             {errorMsg}
           </p>
+          {detail && (
+            <p className="max-w-full break-all font-medium text-[11px] text-white/40" dir="ltr">
+              {detail}
+            </p>
+          )}
           <button
             type="button"
             onClick={onClose}
