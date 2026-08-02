@@ -108,6 +108,15 @@ export async function uploadFile(path: string, file: File): Promise<{ key: strin
   return api(path, { method: 'POST', body: form })
 }
 
+export async function uploadModel(file: File): Promise<{ key: string; url: string }> {
+  if (file.size > 10 * 1024 * 1024) {
+    throw new ApiError('الموديل أكبر من 10MB — ابعته لكلود يضغطه الأول', 400)
+  }
+  const form = new FormData()
+  form.append('file', file)
+  return api('/admin/upload-model', { method: 'POST', body: form })
+}
+
 export const SIZES = Array.from({ length: 10 }, (_, i) => 35 + i)
 
 export function effectivePrice(p: Pick<Product, 'price' | 'sale_price' | 'on_sale'>): number {

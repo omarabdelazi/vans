@@ -79,7 +79,14 @@ const SCHEMA = [
     key TEXT PRIMARY KEY,
     mime TEXT NOT NULL,
     data TEXT NOT NULL,
+    chunks INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `CREATE TABLE IF NOT EXISTS file_chunks (
+    key TEXT NOT NULL,
+    idx INTEGER NOT NULL,
+    data TEXT NOT NULL,
+    PRIMARY KEY (key, idx)
   )`,
   `INSERT OR IGNORE INTO settings (key, value) VALUES
     ('instapay_number', ''),
@@ -97,6 +104,11 @@ let migrated = false
 async function ensureSchema(db: D1Database) {
   if (migrated) return
   await db.batch(SCHEMA.map((sql) => db.prepare(sql)))
+  // Older deployments created `files` without the chunks column.
+  await db
+    .prepare('ALTER TABLE files ADD COLUMN chunks INTEGER NOT NULL DEFAULT 0')
+    .run()
+    .catch(() => {})
   migrated = true
 }
 
@@ -529,21 +541,105 @@ app.post('/admin/upload', async (c) => {
   return c.json({ key: res.key, url: `/api/files/${res.key}` })
 })
 
-app.get('/files/*', async (c) => {
-  const key = c.req.path.replace('/api/files/', '')
-  const row = await c.env.DB.prepare('SELECT mime, data FROM files WHERE key = ?')
-    .bind(key)
-    .first<{ mime: string; data: string }>()
-  if (!row) return bad('not found', 404)
-  const bin = atob(row.data)
+// 3D models (GLB) are stored across multiple rows to stay under D1's
+// per-row size limit.
+const MODEL_CHUNK_BYTES = 700_000
+const MODEL_MAX_BYTES = 10 * 1024 * 1024
+
+function toBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const step = 0x8000
+  for (let i = 0; i < bytes.length; i += step) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + step))
+  }
+  return btoa(binary)
+}
+
+app.post('/admin/upload-model', async (c) => {
+  const form = await c.req.formData().catch(() => null)
+  const file = form?.get('file') as File | null
+  if (!file || typeof file === 'string') return bad('file is required')
+  if (!file.name.toLowerCase().endsWith('.glb')) return bad('الملف لازم يكون بصيغة GLB')
+  if (file.size > MODEL_MAX_BYTES) {
+    return bad('الموديل أكبر من 10MB — ابعته لكلود يضغطه الأول أو صغّره وحاول تاني')
+  }
+  const buf = new Uint8Array(await file.arrayBuffer())
+  if (buf.length < 12 || String.fromCharCode(buf[0], buf[1], buf[2], buf[3]) !== 'glTF') {
+    return bad('الملف مش GLB سليم')
+  }
+  const key = `models/${crypto.randomUUID()}.glb`
+  const stmts = []
+  let chunkCount = 0
+  for (let off = 0; off < buf.length; off += MODEL_CHUNK_BYTES) {
+    stmts.push(
+      c.env.DB.prepare('INSERT INTO file_chunks (key, idx, data) VALUES (?, ?, ?)').bind(
+        key,
+        chunkCount++,
+        toBase64(buf.subarray(off, off + MODEL_CHUNK_BYTES)),
+      ),
+    )
+  }
+  stmts.push(
+    c.env.DB.prepare("INSERT INTO files (key, mime, data, chunks) VALUES (?, 'model/gltf-binary', '', ?)").bind(
+      key,
+      chunkCount,
+    ),
+  )
+  await c.env.DB.batch(stmts)
+  return c.json({ key, url: `/api/files/${key}` })
+})
+
+function fromBase64(b64: string): Uint8Array {
+  const bin = atob(b64)
   const bytes = new Uint8Array(bin.length)
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-  return new Response(bytes, {
+  return bytes
+}
+
+app.get('/files/*', async (c) => {
+  // Serve from the edge cache when possible — decoding large models from
+  // D1 on every request would waste CPU.
+  const cache = caches.default
+  const cached = await cache.match(c.req.raw).catch(() => undefined)
+  if (cached) return cached
+
+  const key = c.req.path.replace('/api/files/', '')
+  const row = await c.env.DB.prepare('SELECT mime, data, chunks FROM files WHERE key = ?')
+    .bind(key)
+    .first<{ mime: string; data: string; chunks: number }>()
+  if (!row) return bad('not found', 404)
+
+  let body: Uint8Array
+  if (row.chunks > 0) {
+    const parts = await c.env.DB.prepare(
+      'SELECT data FROM file_chunks WHERE key = ? ORDER BY idx',
+    )
+      .bind(key)
+      .all<{ data: string }>()
+    const decoded = parts.results.map((p) => fromBase64(p.data))
+    const total = decoded.reduce((n, d) => n + d.length, 0)
+    body = new Uint8Array(total)
+    let off = 0
+    for (const d of decoded) {
+      body.set(d, off)
+      off += d.length
+    }
+  } else {
+    body = fromBase64(row.data)
+  }
+
+  const res = new Response(body, {
     headers: {
       'Content-Type': row.mime,
       'Cache-Control': 'public, max-age=31536000, immutable',
     },
   })
+  try {
+    c.executionCtx.waitUntil(cache.put(c.req.raw, res.clone()))
+  } catch {
+    /* execution context unavailable in some local dev modes */
+  }
+  return res
 })
 
 /* ----------------------------- orders ------------------------------ */
@@ -805,4 +901,5 @@ app.get('/admin/stats', async (c) => {
 
 app.notFound((c) => bad(`no route for ${c.req.path}`, 404))
 
-export const onRequest: PagesFunction<Env> = (ctx) => app.fetch(ctx.request, ctx.env)
+export const onRequest: PagesFunction<Env> = (ctx) =>
+  app.fetch(ctx.request, ctx.env, ctx as unknown as ExecutionContext)

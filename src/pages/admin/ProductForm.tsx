@@ -4,6 +4,7 @@ import {
   api,
   SIZES,
   uploadFile,
+  uploadModel,
   type Category,
   type ProductDetail,
 } from '../../lib/api'
@@ -47,6 +48,7 @@ export default function ProductForm() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadingModel, setUploadingModel] = useState(false)
 
   useEffect(() => {
     api<Category[]>('/categories')
@@ -95,6 +97,21 @@ export default function ProductForm() {
       setError(err instanceof Error ? err.message : 'فشل الرفع')
     } finally {
       setUploading(false)
+    }
+  }
+
+  const onUploadModel = async (file: File | undefined) => {
+    if (!file) return
+    setUploadingModel(true)
+    setError('')
+    try {
+      const res = await uploadModel(file)
+      set('model_url', res.url)
+      set('has_ar', true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'فشل رفع الموديل')
+    } finally {
+      setUploadingModel(false)
     }
   }
 
@@ -250,7 +267,28 @@ export default function ProductForm() {
         </Field>
 
         <div className="border border-black/10 bg-neutral-50 p-4">
-          <Field label="رابط موديل 3D (ملف GLB) — اختياري">
+          <p className="mb-2 font-medium text-[15px]">موديل 3D للمنتج (اختياري)</p>
+          <label className="block">
+            <span className="mb-1 block font-medium text-[13px] text-black/60">
+              ارفع ملف GLB من جهازك (لحد 10MB)
+            </span>
+            <input
+              type="file"
+              accept=".glb"
+              onChange={(e) => {
+                onUploadModel(e.target.files?.[0])
+                e.target.value = ''
+              }}
+              className="block w-full font-medium text-[13px] file:ml-3 file:border file:border-black file:bg-white file:px-4 file:py-2 file:font-medium"
+            />
+          </label>
+          {uploadingModel && (
+            <p className="mt-1 font-medium text-[12px] text-black/50">جاري رفع الموديل…</p>
+          )}
+          {form.model_url && !uploadingModel && (
+            <p className="mt-1 font-medium text-[12px] text-green-700">✓ فيه موديل مرتبط بالمنتج</p>
+          )}
+          <Field label="أو حط رابط جاهز">
             <input
               dir="ltr"
               value={form.model_url}
@@ -267,10 +305,11 @@ export default function ProductForm() {
               onChange={(e) => set('has_ar', e.target.checked)}
               className="h-4 w-4 accent-black"
             />
-            تفعيل خاصية AR (العميل يجرب الشوز بكاميرا الموبايل)
+            تفعيل التجربة على الرجل (كاميرا الموبايل)
           </label>
           <p className="mt-1 font-medium text-[12px] text-black/50">
-            جرّب الرابط الجاهز /models/shoe.glb — أو ولّد موديل لمنتجك من Higgsfield وحط رابطه هنا.
+            لو الملف أكبر من 10MB ابعته لكلود في الشات يضغطه — وبعد الحفظ هيظهر للعميل زرار
+            "TRY ON" في صفحة المنتج.
           </p>
         </div>
 

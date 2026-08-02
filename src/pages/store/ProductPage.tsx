@@ -9,6 +9,7 @@ import {
 } from '../../lib/api'
 import { useCart } from '../../lib/cart'
 import { ensureModelViewer } from '../../lib/modelViewer'
+import { TryOn } from '../../components/TryOn'
 
 export default function ProductPage() {
   const { id } = useParams()
@@ -20,6 +21,7 @@ export default function ProductPage() {
   const [size, setSize] = useState<number | null>(null)
   const [qty, setQty] = useState(1)
   const [added, setAdded] = useState(false)
+  const [tryOnOpen, setTryOnOpen] = useState(false)
 
   useEffect(() => {
     ensureModelViewer()
@@ -104,11 +106,20 @@ export default function ProductPage() {
             </div>
           )}
         </div>
-        {product.has_ar === 1 && product.model_url && view === '3d' && (
-          <p className="mt-2 font-medium text-[12px] text-black/50">
-            AR works on your phone: open this page on mobile, tap the AR button, then point the
-            camera at your feet and place the shoe. — جرّب الشوز على رجلك من موبايلك بالكاميرا.
-          </p>
+        {product.has_ar === 1 && product.model_url && (
+          <>
+            <button
+              type="button"
+              onClick={() => setTryOnOpen(true)}
+              className="mt-3 flex h-12 w-full items-center justify-center gap-2 bg-black font-medium text-[14px] uppercase text-white"
+            >
+              👟 Try it on your feet — جرّبه على رجلك
+            </button>
+            <p className="mt-2 font-medium text-[12px] text-black/50">
+              Opens your camera and puts the shoe on your foot live. Works best on your phone —
+              بيفتح الكاميرا والشوز بيتركب على رجلك مباشرة.
+            </p>
+          </>
         )}
       </div>
 
@@ -218,6 +229,10 @@ export default function ProductPage() {
           </button>
         )}
       </div>
+
+      {tryOnOpen && product.model_url && (
+        <TryOn modelUrl={product.model_url} onClose={() => setTryOnOpen(false)} />
+      )}
     </div>
   )
 }
