@@ -32,6 +32,7 @@ export function Shoe3DCursor() {
       <model-viewer
         src="/models/shoe.glb"
         alt=""
+        loading="eager"
         auto-rotate
         auto-rotate-delay="0"
         rotation-per-second="40deg"

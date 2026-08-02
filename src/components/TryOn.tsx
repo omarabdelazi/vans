@@ -22,11 +22,15 @@ const R_HEEL = 30
 const L_TOE = 31
 const R_TOE = 32
 
+const AUTO_TIMEOUT_MS = 5000
+
 /**
- * Camera-based virtual try-on: MediaPipe Pose (self-hosted, runs fully in the
- * browser) finds the customer's foot and the product's 3D model is rendered
- * as a sprite that sticks to it — position, size, and rotation follow the
- * foot in real time. No paid services involved.
+ * Camera-based virtual try-on. Two modes:
+ * - auto: MediaPipe Pose (self-hosted, in-browser) tracks the foot and the
+ *   shoe sticks to it. Needs enough of the body in frame to detect a person.
+ * - manual: the shoe appears on screen and the customer drags it onto their
+ *   foot, pinches to resize, and twists to rotate — always works, on every
+ *   device. We fall back to it automatically when tracking finds nothing.
  */
 export function TryOn({ modelUrl, onClose }: TryOnProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -36,27 +40,67 @@ export function TryOn({ modelUrl, onClose }: TryOnProps) {
   const [errorMsg, setErrorMsg] = useState('')
   const [spriteUrl, setSpriteUrl] = useState('')
   const [footVisible, setFootVisible] = useState(false)
+  const [mode, setMode] = useState<'auto' | 'manual'>('auto')
+  const modeRef = useRef<'auto' | 'manual'>('auto')
+  const everDetectedRef = useRef(false)
+
+  // Manual placement state (pixels / degrees), applied straight to the DOM.
+  const manualRef = useRef({ x: 0, y: 0, width: 0, angle: -8, flip: false, placed: false })
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>())
+  const pinchRef = useRef<{ dist: number; angle: number; width: number; rotation: number } | null>(null)
+
+  const setModeBoth = (m: 'auto' | 'manual') => {
+    modeRef.current = m
+    setMode(m)
+  }
+
+  const applyManual = () => {
+    const shoe = shoeRef.current
+    const m = manualRef.current
+    if (!shoe) return
+    shoe.style.opacity = '1'
+    shoe.style.width = `${m.width}px`
+    shoe.style.transform = `translate(${m.x}px, ${m.y}px) translate(-50%, -50%) rotate(${m.angle}deg)${m.flip ? ' scaleX(-1)' : ''}`
+  }
+
+  const enterManual = () => {
+    const container = containerRef.current
+    if (!container) return
+    const m = manualRef.current
+    if (!m.placed) {
+      m.x = container.clientWidth / 2
+      m.y = container.clientHeight * 0.55
+      m.width = Math.min(container.clientWidth, container.clientHeight) * 0.55
+      m.placed = true
+    }
+    setModeBoth('manual')
+    applyManual()
+  }
 
   // Render the GLB once into a transparent side-view sprite.
   useEffect(() => {
     let disposed = false
-    let viewer: HTMLElement & { toDataURL?: (type?: string) => string }
+    let viewer: (HTMLElement & { toDataURL?: (type?: string) => string }) | undefined
     ;(async () => {
       await ensureModelViewer()
       if (disposed) return
-      viewer = document.createElement('model-viewer') as typeof viewer
+      viewer = document.createElement('model-viewer') as NonNullable<typeof viewer>
       viewer.setAttribute('src', modelUrl)
       viewer.setAttribute('camera-orbit', '90deg 86deg 108%')
       viewer.setAttribute('interaction-prompt', 'none')
       viewer.setAttribute('shadow-intensity', '0')
+      viewer.setAttribute('loading', 'eager')
+      // Must stay inside the viewport (transparent, behind the overlay):
+      // model-viewer lazy-loads and stops rendering when off-screen, which
+      // would leave the snapshot blank.
       viewer.style.cssText =
-        'position:fixed;left:-9999px;top:0;width:512px;height:512px;background:transparent;'
+        'position:fixed;left:0;top:0;width:512px;height:512px;opacity:0;pointer-events:none;z-index:0;background:transparent;'
       document.body.appendChild(viewer)
       viewer.addEventListener('load', () => {
         requestAnimationFrame(() =>
           requestAnimationFrame(() => {
             try {
-              const url = viewer.toDataURL?.('image/png')
+              const url = viewer?.toDataURL?.('image/png')
               if (url && !disposed) setSpriteUrl(url)
             } catch {
               if (!disposed) {
@@ -64,12 +108,12 @@ export function TryOn({ modelUrl, onClose }: TryOnProps) {
                 setErrorMsg('حصلت مشكلة في تجهيز الموديل')
               }
             }
-            viewer.remove()
+            viewer?.remove()
           }),
         )
       })
       viewer.addEventListener('error', () => {
-        viewer.remove()
+        viewer?.remove()
         if (!disposed) {
           setPhase('error')
           setErrorMsg('مقدرناش نحمّل موديل المنتج')
@@ -94,7 +138,7 @@ export function TryOn({ modelUrl, onClose }: TryOnProps) {
       const video = videoRef.current
       const shoe = shoeRef.current
       const container = containerRef.current
-      if (!video || !shoe || !container || stopped) return
+      if (!video || !shoe || !container || stopped || modeRef.current !== 'auto') return
 
       const lm = results.poseLandmarks
       const pick = (heelIdx: number, toeIdx: number) => {
@@ -102,7 +146,7 @@ export function TryOn({ modelUrl, onClose }: TryOnProps) {
         const toe = lm?.[toeIdx]
         if (!heel || !toe) return null
         const vis = Math.min(heel.visibility ?? 0, toe.visibility ?? 0)
-        return vis > 0.55 ? { heel, toe, vis } : null
+        return vis > 0.4 ? { heel, toe, vis } : null
       }
       const left = pick(L_HEEL, L_TOE)
       const right = pick(R_HEEL, R_TOE)
@@ -117,6 +161,7 @@ export function TryOn({ modelUrl, onClose }: TryOnProps) {
         return
       }
       lastSeen = now
+      everDetectedRef.current = true
       setFootVisible(true)
 
       // Map normalized video coords through the object-cover crop.
@@ -173,6 +218,13 @@ export function TryOn({ modelUrl, onClose }: TryOnProps) {
       }
       video.srcObject = stream
       await video.play().catch(() => {})
+      setPhase('ready')
+
+      // If tracking finds nothing in time (foot-only framing, or devices
+      // where the pose engine fails), fall back to manual placement.
+      setTimeout(() => {
+        if (!stopped && !everDetectedRef.current && modeRef.current === 'auto') enterManual()
+      }, AUTO_TIMEOUT_MS)
 
       try {
         const mod = (await import('@mediapipe/pose')) as {
@@ -190,25 +242,24 @@ export function TryOn({ modelUrl, onClose }: TryOnProps) {
           modelComplexity: 0,
           smoothLandmarks: true,
           enableSegmentation: false,
-          minDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5,
+          minDetectionConfidence: 0.4,
+          minTrackingConfidence: 0.4,
         })
         p.onResults(onResults)
         pose = p
-        setPhase('ready')
 
         const loop = async () => {
           if (stopped) return
           const v = videoRef.current
-          if (v && v.readyState >= 2) {
+          if (v && v.readyState >= 2 && modeRef.current === 'auto') {
             await p.send({ image: v }).catch(() => {})
           }
           if (!stopped) setTimeout(loop, 33)
         }
         loop()
       } catch {
-        setPhase('error')
-        setErrorMsg('مقدرناش نشغّل تتبع القدم على الجهاز ده')
+        // Pose engine unavailable on this device — manual mode still works.
+        if (!stopped) enterManual()
       }
     })()
 
@@ -217,10 +268,69 @@ export function TryOn({ modelUrl, onClose }: TryOnProps) {
       stream?.getTracks().forEach((tr) => tr.stop())
       pose?.close().catch(() => {})
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /* ---------------- manual gestures (drag / pinch / twist) ---------------- */
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (modeRef.current !== 'manual') return
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pointersRef.current.size === 2) {
+      const [a, b] = [...pointersRef.current.values()]
+      pinchRef.current = {
+        dist: Math.hypot(b.x - a.x, b.y - a.y),
+        angle: Math.atan2(b.y - a.y, b.x - a.x),
+        width: manualRef.current.width,
+        rotation: manualRef.current.angle,
+      }
+    }
+  }
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (modeRef.current !== 'manual') return
+    const prev = pointersRef.current.get(e.pointerId)
+    if (!prev) return
+    const next = { x: e.clientX, y: e.clientY }
+    pointersRef.current.set(e.pointerId, next)
+
+    if (pointersRef.current.size === 1) {
+      manualRef.current.x += next.x - prev.x
+      manualRef.current.y += next.y - prev.y
+    } else if (pointersRef.current.size === 2 && pinchRef.current) {
+      const [a, b] = [...pointersRef.current.values()]
+      const dist = Math.hypot(b.x - a.x, b.y - a.y)
+      const angle = Math.atan2(b.y - a.y, b.x - a.x)
+      manualRef.current.width = Math.min(
+        1200,
+        Math.max(60, (pinchRef.current.width * dist) / Math.max(1, pinchRef.current.dist)),
+      )
+      manualRef.current.angle =
+        pinchRef.current.rotation + ((angle - pinchRef.current.angle) * 180) / Math.PI
+    }
+    applyManual()
+  }
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    pointersRef.current.delete(e.pointerId)
+    if (pointersRef.current.size < 2) pinchRef.current = null
+  }
+
+  const nudge = (fn: (m: typeof manualRef.current) => void) => {
+    fn(manualRef.current)
+    applyManual()
+  }
+
   return (
-    <div ref={containerRef} className="fixed inset-0 z-50 overflow-hidden bg-black" style={{ cursor: 'auto' }}>
+    <div
+      ref={containerRef}
+      className="fixed inset-0 z-50 overflow-hidden bg-black"
+      style={{ cursor: 'auto', touchAction: mode === 'manual' ? 'none' : 'auto' }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
       <video ref={videoRef} muted playsInline autoPlay className="absolute inset-0 h-full w-full object-cover" />
       {spriteUrl && (
         <img
@@ -228,7 +338,7 @@ export function TryOn({ modelUrl, onClose }: TryOnProps) {
           src={spriteUrl}
           alt=""
           draggable={false}
-          className="pointer-events-none absolute left-0 top-0"
+          className="pointer-events-none absolute left-0 top-0 select-none"
           style={{ opacity: 0, transition: 'opacity 0.25s ease', willChange: 'transform' }}
         />
       )}
@@ -267,16 +377,66 @@ export function TryOn({ modelUrl, onClose }: TryOnProps) {
         </div>
       )}
 
-      {phase === 'ready' && !footVisible && (
-        <div className="absolute inset-x-0 bottom-10 flex justify-center px-6">
-          <p
-            className="rounded-full bg-black/60 px-6 py-3 text-center font-medium text-[15px] text-white"
+      {phase === 'ready' && mode === 'auto' && (
+        <div className="absolute inset-x-0 bottom-8 flex flex-col items-center gap-3 px-6">
+          {!footVisible && (
+            <p className="rounded-full bg-black/60 px-6 py-3 text-center font-medium text-[14px] text-white" dir="rtl">
+              بندوّر على رجلك… 👟
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={enterManual}
+            className="rounded-full bg-white px-6 py-3 font-medium text-[14px] text-black"
             dir="rtl"
           >
-            وجّه الكاميرا على رجلك بالكامل (من الركبة للأرض) 👟
+            ✋ حط الشوز بنفسك (تحكم يدوي)
+          </button>
+        </div>
+      )}
+
+      {phase === 'ready' && mode === 'manual' && (
+        <div className="absolute inset-x-0 bottom-6 flex flex-col items-center gap-3 px-4">
+          <p className="rounded-full bg-black/60 px-5 py-2 text-center font-medium text-[13px] text-white" dir="rtl">
+            اسحب الشوز على رجلك — قرّب صباعين لتكبيره ولفّه ✌️
           </p>
+          <div className="flex items-center gap-2" dir="ltr">
+            <CtrlBtn label="⟲" onClick={() => nudge((m) => (m.angle -= 12))} />
+            <CtrlBtn label="⟳" onClick={() => nudge((m) => (m.angle += 12))} />
+            <CtrlBtn label="−" onClick={() => nudge((m) => (m.width = Math.max(60, m.width * 0.88)))} />
+            <CtrlBtn label="+" onClick={() => nudge((m) => (m.width = Math.min(1200, m.width * 1.14)))} />
+            <CtrlBtn label="⇋" onClick={() => nudge((m) => (m.flip = !m.flip))} />
+            <button
+              type="button"
+              onClick={() => {
+                if (shoeRef.current) shoeRef.current.style.opacity = '0'
+                everDetectedRef.current = false
+                setFootVisible(false)
+                setModeBoth('auto')
+                setTimeout(() => {
+                  if (modeRef.current === 'auto' && !everDetectedRef.current) enterManual()
+                }, AUTO_TIMEOUT_MS)
+              }}
+              className="h-11 rounded-full bg-white/90 px-4 font-medium text-[13px] text-black"
+              dir="rtl"
+            >
+              🎯 تتبع تلقائي
+            </button>
+          </div>
         </div>
       )}
     </div>
+  )
+}
+
+function CtrlBtn({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="h-11 w-11 rounded-full bg-white/90 font-medium text-[18px] text-black"
+    >
+      {label}
+    </button>
   )
 }
