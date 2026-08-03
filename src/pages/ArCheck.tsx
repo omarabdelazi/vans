@@ -16,7 +16,9 @@ const INITIAL: Step[] = [
   { name: 'تحميل محرك التتبع (6MB) وقياس سرعة النت', status: 'wait' },
   { name: 'إذن الكاميرا الخلفية', status: 'wait' },
   { name: 'تشغيل محرك DeepAR (ترخيص + كاميرا)', status: 'wait' },
-  { name: 'تحميل الشوز وتفعيل تتبع القدم', status: 'wait' },
+  { name: 'تحميل فلتر تجريبي رسمي (اختبار مرجعي)', status: 'wait' },
+  { name: 'تفعيل تتبع القدم (من غير الشوز)', status: 'wait' },
+  { name: 'تحميل ملف الشوز بتاعك', status: 'wait' },
 ]
 
 const CDN = `https://cdn.jsdelivr.net/npm/deepar@${pkg.version}/`
@@ -100,14 +102,19 @@ export default function ArCheck() {
     })
 
     if (licenseKey && camOk) {
-      let dar: { shutdown: () => void; switchEffect: (e: string, o?: object) => Promise<void> } | null =
-        null
+      interface Engine {
+        shutdown: () => void
+        switchEffect: (e: string, o?: object) => Promise<void>
+        clearEffect: () => void
+        initializeFootTracking: () => void
+        isFootTrackingInitialized: () => boolean
+      }
+      let dar: Engine | null = null
       const engineOk = await timed(5, async () => {
         const deepar = await import('deepar')
         const params = {
           licenseKey,
           previewElement: previewRef.current!,
-          hint: 'footInit',
           additionalOptions: { cameraConfig: { facingMode: 'environment' } },
         } as unknown as Parameters<typeof deepar.initialize>[0]
         dar = (await Promise.race([
@@ -115,27 +122,54 @@ export default function ArCheck() {
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('timeout بعد 60 ثانية')), 60_000),
           ),
-        ])) as unknown as typeof dar
+        ])) as unknown as Engine
         return true
       })
 
       if (engineOk && dar) {
+        const engine: Engine = dar
+
+        // Reference test: an official face filter from the SDK package.
         await timed(6, async () => {
           await Promise.race([
-            dar!.switchEffect(EFFECT, { trackingInit: { foot: true } }),
+            engine.switchEffect(`${CDN}effects/koala`),
             new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error('timeout بعد 60 ثانية')), 60_000),
             ),
           ])
+          engine.clearEffect()
+        })
+
+        // Foot tracking alone, without any effect.
+        const footOk = await timed(7, async () => {
+          engine.initializeFootTracking()
+          const start = performance.now()
+          while (!engine.isFootTrackingInitialized()) {
+            if (performance.now() - start > 90_000) throw new Error('timeout بعد 90 ثانية')
+            await new Promise((r) => setTimeout(r, 500))
+          }
           return true
         })
+
+        // Finally the actual shoe effect.
+        if (footOk) {
+          await timed(8, async () => {
+            await Promise.race([
+              engine.switchEffect(EFFECT),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('timeout بعد 60 ثانية')), 60_000),
+              ),
+            ])
+          })
+        } else {
+          update(8, { status: 'fail', detail: 'اتخطت — تتبع القدم مشتغلش' })
+        }
+        engine.shutdown()
       } else {
-        update(6, { status: 'fail', detail: 'اتخطت — المحرك مشتغلش' })
+        for (const i of [6, 7, 8]) update(i, { status: 'fail', detail: 'اتخطت — المحرك مشتغلش' })
       }
-      ;(dar as { shutdown: () => void } | null)?.shutdown()
     } else {
-      update(5, { status: 'fail', detail: 'اتخطت — خطوة سابقة فشلت' })
-      update(6, { status: 'fail', detail: 'اتخطت — خطوة سابقة فشلت' })
+      for (const i of [5, 6, 7, 8]) update(i, { status: 'fail', detail: 'اتخطت — خطوة سابقة فشلت' })
     }
 
     setRunning(false)
