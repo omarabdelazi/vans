@@ -9,6 +9,8 @@ interface DeepARTryOnProps {
 interface DeepARInstance {
   shutdown: () => void
   switchEffect: (effect: string, options?: { trackingInit?: { foot?: boolean } }) => Promise<void>
+  initializeFootTracking: () => void
+  isFootTrackingInitialized: () => boolean
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -44,12 +46,13 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
         // Two stages: start the engine + camera first (fast, camera becomes
         // visible), then load the shoe effect with foot tracking explicitly
         // requested — isolating failures and avoiding lazy-init deadlocks.
-        // The published typings lag behind the runtime API (hint /
-        // trackingInit exist in the SDK's own internal .d.ts files).
+        // Proven working sequence (verified step-by-step on device):
+        // engine without effect → initializeFootTracking + poll → then the
+        // shoe effect. Loading the effect together with lazy foot-tracking
+        // init deadlocks on mobile.
         const params = {
           licenseKey,
           previewElement: previewRef.current!,
-          hint: 'footInit',
           additionalOptions: {
             cameraConfig: {
               facingMode: 'environment',
@@ -67,11 +70,16 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
         }
         instance = dar
         setPhase('effect')
-        await withTimeout(
-          dar.switchEffect(effectUrl, { trackingInit: { foot: true } }),
-          60_000,
-          'effect',
-        )
+
+        dar.initializeFootTracking()
+        const footStart = performance.now()
+        while (!dar.isFootTrackingInitialized()) {
+          if (cancelled) return
+          if (performance.now() - footStart > 90_000) throw new Error('foot-timeout')
+          await new Promise((r) => setTimeout(r, 400))
+        }
+
+        await withTimeout(dar.switchEffect(effectUrl), 60_000, 'effect')
         if (cancelled) return
         setPhase('ready')
       } catch (err) {
@@ -88,6 +96,8 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
           )
         } else if (/engine-timeout/i.test(msg)) {
           setErrorMsg('تشغيل المحرك خد وقت طويل — دوس "جرّب تاني"')
+        } else if (/foot-timeout/i.test(msg)) {
+          setErrorMsg('تجهيز تتبع القدم خد وقت طويل — دوس "جرّب تاني"')
         } else if (/effect-timeout/i.test(msg)) {
           setErrorMsg('تحميل الشوز علّق — دوس "جرّب تاني"، ولو اتكررت صوّر الشاشة وابعتها لكلود')
         } else {
