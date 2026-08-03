@@ -8,7 +8,13 @@ interface DeepARTryOnProps {
 
 interface DeepARInstance {
   shutdown: () => void
-  switchEffect: (effect: string, options?: { trackingInit?: { foot?: boolean } }) => Promise<void>
+  switchEffect: (
+    effect: string,
+    options?: {
+      trackingInit?: { foot?: boolean }
+      onProgress?: (p: { loaded: number; total?: number }) => void
+    },
+  ) => Promise<void>
   initializeFootTracking: () => void
   isFootTrackingInitialized: () => boolean
 }
@@ -31,6 +37,7 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
   const [errorMsg, setErrorMsg] = useState('')
   const [attempt, setAttempt] = useState(0)
   const [slow, setSlow] = useState(false)
+  const [progress, setProgress] = useState<number | null>(null)
 
   const [detail, setDetail] = useState('')
 
@@ -79,7 +86,15 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
           await new Promise((r) => setTimeout(r, 400))
         }
 
-        await withTimeout(dar.switchEffect(effectUrl), 60_000, 'effect')
+        await withTimeout(
+          dar.switchEffect(effectUrl, {
+            onProgress: (p) => {
+              if (p?.total) setProgress(Math.min(100, Math.round((p.loaded / p.total) * 100)))
+            },
+          }),
+          120_000,
+          'effect',
+        )
         if (cancelled) return
         setPhase('ready')
       } catch (err) {
@@ -152,7 +167,9 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
       {phase === 'effect' && (
         <div className="absolute inset-x-0 bottom-8 z-10 flex justify-center px-6">
           <p className="animate-pulse rounded-full bg-black/60 px-6 py-3 text-center font-medium text-[14px] text-white" dir="rtl">
-            الكاميرا شغالة — بيحمّل الشوز وتتبع القدم… ⏳
+            {progress != null
+              ? `بيحمّل الشوز… ${progress}% 👟`
+              : 'الكاميرا شغالة — بيحمّل الشوز وتتبع القدم… ⏳'}
           </p>
         </div>
       )}
