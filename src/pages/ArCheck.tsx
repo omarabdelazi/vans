@@ -15,7 +15,8 @@ const INITIAL: Step[] = [
   { name: 'الوصول لسيرفر التحميل (jsdelivr CDN)', status: 'wait' },
   { name: 'تحميل محرك التتبع (6MB) وقياس سرعة النت', status: 'wait' },
   { name: 'إذن الكاميرا الخلفية', status: 'wait' },
-  { name: 'تشغيل DeepAR كامل (ترخيص + تتبع)', status: 'wait' },
+  { name: 'تشغيل محرك DeepAR (ترخيص + كاميرا)', status: 'wait' },
+  { name: 'تحميل الشوز وتفعيل تتبع القدم', status: 'wait' },
 ]
 
 const CDN = `https://cdn.jsdelivr.net/npm/deepar@${pkg.version}/`
@@ -99,25 +100,42 @@ export default function ArCheck() {
     })
 
     if (licenseKey && camOk) {
-      await timed(5, async () => {
+      let dar: { shutdown: () => void; switchEffect: (e: string, o?: object) => Promise<void> } | null =
+        null
+      const engineOk = await timed(5, async () => {
         const deepar = await import('deepar')
-        const init = deepar.initialize({
+        const params = {
           licenseKey,
           previewElement: previewRef.current!,
-          effect: EFFECT,
+          hint: 'footInit',
           additionalOptions: { cameraConfig: { facingMode: 'environment' } },
-        })
-        const dar = await Promise.race([
-          init,
+        } as unknown as Parameters<typeof deepar.initialize>[0]
+        dar = (await Promise.race([
+          deepar.initialize(params),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('timeout بعد 60 ثانية')), 60_000),
           ),
-        ])
-        dar.shutdown()
+        ])) as unknown as typeof dar
         return true
       })
+
+      if (engineOk && dar) {
+        await timed(6, async () => {
+          await Promise.race([
+            dar!.switchEffect(EFFECT, { trackingInit: { foot: true } }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('timeout بعد 60 ثانية')), 60_000),
+            ),
+          ])
+          return true
+        })
+      } else {
+        update(6, { status: 'fail', detail: 'اتخطت — المحرك مشتغلش' })
+      }
+      ;(dar as { shutdown: () => void } | null)?.shutdown()
     } else {
       update(5, { status: 'fail', detail: 'اتخطت — خطوة سابقة فشلت' })
+      update(6, { status: 'fail', detail: 'اتخطت — خطوة سابقة فشلت' })
     }
 
     setRunning(false)

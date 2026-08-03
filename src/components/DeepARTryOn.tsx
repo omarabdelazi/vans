@@ -8,6 +8,14 @@ interface DeepARTryOnProps {
 
 interface DeepARInstance {
   shutdown: () => void
+  switchEffect: (effect: string, options?: { trackingInit?: { foot?: boolean } }) => Promise<void>
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${label}-timeout`)), ms)),
+  ])
 }
 
 /**
@@ -17,7 +25,7 @@ interface DeepARInstance {
  */
 export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps) {
   const previewRef = useRef<HTMLDivElement>(null)
-  const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [phase, setPhase] = useState<'loading' | 'effect' | 'ready' | 'error'>('loading')
   const [errorMsg, setErrorMsg] = useState('')
   const [attempt, setAttempt] = useState(0)
   const [slow, setSlow] = useState(false)
@@ -33,29 +41,38 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
     ;(async () => {
       try {
         const deepar = await import('deepar')
-        // The SDK resolves its runtime (wasm + tracking models) from its
-        // versioned CDN by default, which guarantees every file exists.
-        const init = deepar.initialize({
+        // Two stages: start the engine + camera first (fast, camera becomes
+        // visible), then load the shoe effect with foot tracking explicitly
+        // requested — isolating failures and avoiding lazy-init deadlocks.
+        // The published typings lag behind the runtime API (hint /
+        // trackingInit exist in the SDK's own internal .d.ts files).
+        const params = {
           licenseKey,
           previewElement: previewRef.current!,
-          effect: effectUrl,
+          hint: 'footInit',
           additionalOptions: {
             cameraConfig: {
               facingMode: 'environment',
             },
           },
-        })
-        const dar = await Promise.race([
-          init,
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('deepar-init-timeout')), 90_000),
-          ),
-        ])
+        } as unknown as Parameters<typeof deepar.initialize>[0]
+        const dar = (await withTimeout(
+          deepar.initialize(params),
+          60_000,
+          'engine',
+        )) as unknown as DeepARInstance
         if (cancelled) {
           dar.shutdown()
           return
         }
         instance = dar
+        setPhase('effect')
+        await withTimeout(
+          dar.switchEffect(effectUrl, { trackingInit: { foot: true } }),
+          60_000,
+          'effect',
+        )
+        if (cancelled) return
         setPhase('ready')
       } catch (err) {
         if (cancelled) return
@@ -69,10 +86,10 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
           setErrorMsg(
             'مشكلة في الترخيص — اتأكد إن الدومين vans-yxm.pages.dev مضاف في مشروعك على developer.deepar.ai',
           )
-        } else if (/timeout/i.test(msg)) {
-          setErrorMsg(
-            'التحميل خد وقت طويل — دوس "جرّب تاني": اللي اتحمّل اتخزن وهيكمّل أسرع بكتير',
-          )
+        } else if (/engine-timeout/i.test(msg)) {
+          setErrorMsg('تشغيل المحرك خد وقت طويل — دوس "جرّب تاني"')
+        } else if (/effect-timeout/i.test(msg)) {
+          setErrorMsg('تحميل الشوز علّق — دوس "جرّب تاني"، ولو اتكررت صوّر الشاشة وابعتها لكلود')
         } else {
           setErrorMsg('مقدرناش نشغّل التجربة — جرّب تاني أو من متصفح مختلف')
         }
@@ -119,6 +136,14 @@ export function DeepARTryOn({ effectUrl, licenseKey, onClose }: DeepARTryOnProps
               أول مرة بياخد وقت أطول شوية علشان بيحمّل محرك التتبع — المرات الجاية هتفتح فورًا
             </p>
           )}
+        </div>
+      )}
+
+      {phase === 'effect' && (
+        <div className="absolute inset-x-0 bottom-8 z-10 flex justify-center px-6">
+          <p className="animate-pulse rounded-full bg-black/60 px-6 py-3 text-center font-medium text-[14px] text-white" dir="rtl">
+            الكاميرا شغالة — بيحمّل الشوز وتتبع القدم… ⏳
+          </p>
         </div>
       )}
 
