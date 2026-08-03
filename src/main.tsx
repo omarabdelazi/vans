@@ -13,6 +13,7 @@ import OrderSuccess from './pages/store/OrderSuccess'
 import Contact from './pages/store/Contact'
 
 const AdminApp = lazy(() => import('./pages/admin/AdminApp'))
+const ArCheck = lazy(() => import('./pages/ArCheck'))
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -42,6 +43,14 @@ createRoot(document.getElementById('root')!).render(
             element={
               <Suspense fallback={null}>
                 <AdminApp />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/ar-check"
+            element={
+              <Suspense fallback={null}>
+                <ArCheck />
               </Suspense>
             }
           />
